@@ -11,6 +11,7 @@
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;overflow:hidden}
 #wrap{position:relative;height:100%}
+#c,#c3{position:absolute;left:0;top:0}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #hud{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;pointer-events:none}
 .chip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 10px;font-size:13px;pointer-events:auto}
@@ -42,6 +43,7 @@ small{opacity:.7}
 <div id="bar"><button class="ghost" id="bFriend">친구</button><button class="ghost" id="bMulti">멀티</button><button class="ghost" id="bParty">파티</button><button id="bGacha">뽑기</button></div>
 <div id="modal"><div id="box"></div></div>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const W=2400,H=2400,cv=document.getElementById('c'),g=cv.getContext('2d');
 const ZN=['봄','여름','가을','겨울'],ZC=['#a8d8a0','#5fae5f','#d9a05a','#dbe9f2'],ZD=['#8c9a8a','#7a8a7a','#8f8577','#9aa3a8'],NEED=8;
@@ -98,18 +100,38 @@ function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;
   if(d<60+b.mg){o.x+=(P.x-o.x)*6*dt;o.y+=(P.y-o.y)*6*dt}
   if(d<22){orbs.splice(i,1);credit(o.z);spawn()}}
  draw(t);requestAnimationFrame(loop)}
+const T=window.THREE;let R,SC,CAM,orbGeo,orbMat,pM,ground=[],oM=new Map(),fM={},xM={},camP={x:P.x,z:P.y};
+function mkBox(col,sz,hh){const m=new T.Mesh(new T.BoxGeometry(sz,hh||sz,sz),new T.MeshLambertMaterial({color:col}));m.add(new T.LineSegments(new T.EdgesGeometry(m.geometry),new T.LineBasicMaterial({color:0x111111})));return m}
+function label(txt){const c=document.createElement('canvas');c.width=128;c.height=48;const x=c.getContext('2d');x.font='bold 30px sans-serif';x.textAlign='center';x.lineWidth=6;x.strokeStyle='#000';x.strokeText(txt,64,34);x.fillStyle='#fff';x.fillText(txt,64,34);
+ const sp=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(c),depthTest:false}));sp.scale.set(64,24,1);return sp}
+function init3d(){
+ R=new T.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.domElement.id='c3';
+ document.getElementById('wrap').insertBefore(R.domElement,cv);
+ SC=new T.Scene();SC.background=new T.Color(0x9ec9e8);SC.fog=new T.Fog(0x9ec9e8,500,1500);
+ CAM=new T.PerspectiveCamera(55,1,5,3000);
+ SC.add(new T.AmbientLight(0xffffff,.75));const dl=new T.DirectionalLight(0xffffff,.6);dl.position.set(300,600,200);SC.add(dl);
+ const base=new T.Mesh(new T.PlaneGeometry(8000,8000),new T.MeshLambertMaterial({color:0x222222}));base.rotation.x=-Math.PI/2;base.position.set(W/2,-1,H/2);SC.add(base);
+ for(let i=0;i<4;i++){const m=new T.Mesh(new T.PlaneGeometry(W/2,H/2),new T.MeshLambertMaterial({color:ZD[i]}));m.rotation.x=-Math.PI/2;m.position.set((i%2)*W/2+W/4,0,(i>>1)*H/2+H/4);SC.add(m);ground.push(m)}
+ obs.forEach(o=>{const hh=40+Math.floor(o.x*7+o.y*3)%50,m=mkBox(zone(o.x,o.y)===3?0x9fb5c4:0x3d6b3a,1,1);m.scale.set(o.w,hh,o.h);m.position.set(o.x+o.w/2,hh/2,o.y+o.h/2);SC.add(m)});
+ pM=mkBox(0xffffff,28);SC.add(pM);
+ orbGeo=new T.SphereGeometry(7,12,10);orbMat=new T.MeshBasicMaterial({color:0x7b5cff})}
+function draw3d(t,w,h){
+ if(!R)init3d();
+ if(R._w!==w||R._h!==h){R.setSize(w,h,false);CAM.aspect=w/h;CAM.updateProjectionMatrix();R._w=w;R._h=h}
+ for(let i=0;i<4;i++){const rs=S.prog[i]>=NEED;if(ground[i].rs!==rs){ground[i].rs=rs;ground[i].material.color.set(rs?ZC[i]:ZD[i])}}
+ pM.position.set(P.x,14,P.y);
+ const cur=new Set(orbs);oM.forEach((m,o)=>{if(!cur.has(o)){SC.remove(m);oM.delete(o)}});
+ orbs.forEach(o=>{let m=oM.get(o);if(!m){m=new T.Mesh(orbGeo,orbMat);SC.add(m);oM.set(o,m)}m.position.set(o.x,12+Math.sin(t/250+o.x)*3,o.y)});
+ S.party.forEach((n,i)=>{const c=CH.find(k=>k.n===n),p=P.trail[Math.min(P.trail.length-1,(i+1)*22)];if(!p)return;let m=fM[n];if(!m){m=fM[n]=mkBox(c.c,22);SC.add(m)}m.visible=true;m.position.set(p.x,11,p.y)});
+ for(const n in fM)if(!S.party.includes(n))fM[n].visible=false;
+ for(const u in others){const o=others[u];o.x+=(o.tx-o.x)*.25;o.y+=(o.ty-o.y)*.25;let m=xM[u];
+  if(!m){m=xM[u]=mkBox(new T.Color('hsl('+((parseInt(u.slice(-3))*47)%360)+',70%,55%)'),28);const l=label(u.slice(-4));l.position.y=34;m.add(l);SC.add(m)}m.position.set(o.x,14,o.y)}
+ for(const u in xM)if(!others[u]){SC.remove(xM[u]);delete xM[u]}
+ camP.x+=(P.x-camP.x)*.12;camP.z+=(P.y-camP.z)*.12;
+ CAM.position.set(camP.x,380,camP.z+300);CAM.lookAt(camP.x,0,camP.z);
+ R.render(SC,CAM)}
 function draw(t){const w=cv.width=cv.clientWidth,h=cv.height=cv.clientHeight;
- const cx=Math.max(0,Math.min(W-w,P.x-w/2)),cy=Math.max(0,Math.min(H-h,P.y-h/2));
- g.fillStyle='#222';g.fillRect(0,0,w,h);
- for(let i=0;i<4;i++){const zx=(i%2)*W/2-cx,zy=(i>>1)*H/2-cy;g.fillStyle=S.prog[i]>=NEED?ZC[i]:ZD[i];g.fillRect(zx,zy,W/2,H/2)}
- g.fillStyle='rgba(0,0,0,.25)';obs.forEach(o=>{if(o.x+o.w<cx||o.x>cx+w||o.y+o.h<cy||o.y>cy+h)return;
-  g.fillStyle=ZN.map((_,i)=>i)[zone(o.x,o.y)]===3?'#9fb5c4':'#3d6b3a';g.fillRect(o.x-cx,o.y-cy,o.w,o.h)});
- orbs.forEach(o=>{g.fillStyle='#7b5cff';g.beginPath();g.arc(o.x-cx,o.y-cy,7+Math.sin(t/200+o.x)*1.5,0,7);g.fill();g.strokeStyle='#fff';g.stroke()});
- for(const u in others){const o=others[u];o.x+=(o.tx-o.x)*.25;o.y+=(o.ty-o.y)*.25;
-  g.fillStyle='hsl('+((parseInt(u.slice(-3))*47)%360)+',70%,55%)';g.fillRect(o.x-cx-14,o.y-cy-14,28,28);g.strokeStyle='#111';g.lineWidth=2;g.strokeRect(o.x-cx-14,o.y-cy-14,28,28);
-  g.font='11px sans-serif';g.textAlign='center';g.lineWidth=3;g.strokeStyle='#000';g.strokeText(u.slice(-4),o.x-cx,o.y-cy-20);g.fillStyle='#fff';g.fillText(u.slice(-4),o.x-cx,o.y-cy-20)}
- S.party.forEach((n,i)=>{const c=CH.find(k=>k.n===n),p=P.trail[Math.min(P.trail.length-1,(i+1)*22)];if(!p)return;g.fillStyle=c.c;g.fillRect(p.x-cx-11,p.y-cy-11,22,22)});
- g.fillStyle='#fff';g.fillRect(P.x-cx-14,P.y-cy-14,28,28);g.strokeStyle='#111';g.lineWidth=2;g.strokeRect(P.x-cx-14,P.y-cy-14,28,28);
+ try{draw3d(t,w,h)}catch(e){if(!draw.err){draw.err=1;toast('3D 오류: '+e.message)}}
  const mw=80,mx=w-mw-8,my=44;g.fillStyle='rgba(0,0,0,.4)';g.fillRect(mx,my,mw,mw);
  for(let i=0;i<4;i++){g.fillStyle=S.prog[i]>=NEED?ZC[i]:ZD[i];g.fillRect(mx+(i%2)*mw/2,my+(i>>1)*mw/2,mw/2,mw/2)}
  g.fillStyle='#fff';g.fillRect(mx+P.x/W*mw-2,my+P.y/H*mw-2,4,4);
